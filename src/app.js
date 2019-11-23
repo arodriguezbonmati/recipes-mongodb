@@ -139,7 +139,7 @@ const runGraphQLServer = function (context) {
 
         Query: {
             autor: async (parent, args, ctx, info) => {
-                const id = args;
+                const { id } = args;
                 const { client } = ctx;
 
                 const db = client.db("recetas");
@@ -151,13 +151,13 @@ const runGraphQLServer = function (context) {
             },
 
             ingrediente: async (parent, args, ctx, info) => {
-                const id = args;
+                const { id } = args;
                 const { client } = ctx;
 
                 const db = client.db("recetas");
                 const collection = db.collection("ingredientes");
 
-                const result = await collection.findOne({ _id: ObjectID(id) });
+                const result =  await collection.findOne({ _id: ObjectID(id) });
                 return result;
             },
 
