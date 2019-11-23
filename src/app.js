@@ -53,8 +53,8 @@ const runGraphQLServer = function (context) {
     }
 
     type Query{
-        autor(nombre: String!): Autor
-        ingrediente(nombre: String!): Ingredientes
+        autor(id: ID!): Autor
+        ingrediente(id: ID!): Ingredientes
 
         listaRecetas: [Recetas!]
         listaAutores: [Autor!]
@@ -66,13 +66,13 @@ const runGraphQLServer = function (context) {
         addIngrediente(nombre: String!): Ingredientes!
         addReceta(titulo: String!, descripcion: String!, autor: String!, ingredientes: [String!]): Recetas!
 
-        deleteReceta(titulo: String!): String!
-        deleteAutor(nombre: String!): String!
+        deleteReceta(id: ID!): String!
+        deleteAutor(email: String!): String!
         deleteIngrediente(nombre: String!): String!
 
-        editAutor(nombre: String!, email: String): Autor
-        editReceta(titulo: String!, descripcion: String, autor: String, ingredientes: [String!]): Recetas
-        editIngrediente(nombre: String!, nombre_nuevo: String!): Ingredientes
+        editAutor(id: ID!, nuevoNombre: String, nuevoEmail: String): Autor
+        editReceta(id: ID!, titulo: String, descripcion: String, autor: String, ingredientes: [String!]): Recetas
+        editIngrediente(id: ID!, nuevoNombre: String!): Ingredientes
     }
  
 
@@ -82,17 +82,28 @@ const runGraphQLServer = function (context) {
     const resolvers = {
 
         Autor: {
-            lista_recetas: (parent, args, ctx, info) => {
-                const autorNombre = parent.nombre;
-                return recetasData.filter(obj => obj.autor === autorNombre);
+            lista_recetas: async (parent, args, ctx, info) => {
+                const email1 = parent.email;
+                const { client } = ctx;
 
+                const db = client.db("recetas");
+                const collection = db.collection("recetas");
+
+                const result = await collection.find({ autor: email1 }).toArray();
+                return result;
             }
         },
 
         Ingredientes: {
-            recetas_aparece: (parent, args, ctx, info) => {
-                const ingredienteNombre = parent.nombre;
-                return recetasData.filter(obj => obj.ingredientes.includes(ingredienteNombre));
+            recetas_aparece: async (parent, args, ctx, info) => {
+                const ingrediente = parent.nombre;
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("recetas");
+
+                const result = await collection.find({ ingredientes: ingrediente }).toArray();
+                return result;
             }
         },
 
@@ -104,40 +115,83 @@ const runGraphQLServer = function (context) {
                 const db = client.db("recetas");
                 const collection = db.collection("autores");
 
-                return collection.findOne({email: autorEmail})
+                return collection.findOne({ email: autorEmail })
             },
 
-            ingredientes: (parent, args, ctx, info) => {
+            ingredientes: async (parent, args, ctx, info) => {
+                const ingredientesArr = [];
                 const nombreIngredientes = parent.ingredientes;
                 const { client } = ctx;
 
                 const db = client.db("recetas");
                 const collection = db.collection("ingredientes");
 
-                return collection.findOne({nombre: nombreIngredientes})
+                nombreIngredientes.forEach(elem => {
+                    ingredientesArr.push(collection.findOne({ nombre: elem }))
+                })
+
+                const ing = await Promise.all(ingredientesArr)
+
+                return ing;
 
             }
         },
 
         Query: {
-            autor: (parent, args, ctx, info) => {
-                return autorData.find(obj => obj.nombre === args.nombre);
+            autor: async (parent, args, ctx, info) => {
+                const id = args;
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("autores");
+
+                const result = await collection.findOne({ _id: ObjectID(id) });
+                return result;
+
             },
 
-            ingrediente: (parent, args, ctx, info) => {
-                return ingredientesData.find(obj => obj.nombre === args.nombre);
+            ingrediente: async (parent, args, ctx, info) => {
+                const id = args;
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("ingredientes");
+
+                const result = await collection.findOne({ _id: ObjectID(id) });
+                return result;
             },
 
-            listaRecetas: (parent, args, ctx, info) => {
-                return recetasData;
+            listaRecetas: async (parent, args, ctx, info) => {
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("recetas");
+
+                const result = await collection.find({}).toArray();
+
+                return result;
             },
 
-            listaAutores: (parent, args, ctx, info) => {
-                return autorData;
+            listaAutores: async (parent, args, ctx, info) => {
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("autores");
+
+                const result = await collection.find({}).toArray();
+
+                return result;
             },
 
-            listaIngredientes: (parent, args, ctx, info) => {
-                return ingredientesData;
+            listaIngredientes: async (parent, args, ctx, info) => {
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("ingredientes");
+
+                const result = await collection.find({}).toArray();
+
+                return result;
             }
 
 
@@ -150,11 +204,11 @@ const runGraphQLServer = function (context) {
 
                 const db = client.db("recetas");
                 const collection = db.collection("autores");
-                if(await collection.findOne({email: email})){
-                    throw new Error (`Email ${email} already in use`)
+                if (await collection.findOne({ email: email })) {
+                    throw new Error(`Email ${email} already in use`)
                 }
 
-                const result = await collection.insertOne({nombre, email});
+                const result = await collection.insertOne({ nombre, email });
 
                 return {
                     nombre,
@@ -169,18 +223,18 @@ const runGraphQLServer = function (context) {
 
                 const db = client.db("recetas");
                 const collection = db.collection("ingredientes");
-                if(await collection.findOne({nombre: nombre})){
-                    throw new Error (`${nombre} has already been added`)
+                if (await collection.findOne({ nombre: nombre })) {
+                    throw new Error(`${nombre} has already been added`)
                 }
 
-                const result = await collection.insertOne({nombre});
+                const result = await collection.insertOne({ nombre });
 
                 return {
                     nombre,
                     _id: result.ops[0]._id
                 }
 
-                
+
             },
 
             addReceta: async (parent, args, ctx, info) => {
@@ -196,15 +250,15 @@ const runGraphQLServer = function (context) {
                 const ingredientesdb = client.db("recetas");
                 const ingredientescollection = ingredientesdb.collection("ingredientes");
 
-                if(await collection.findOne({titulo: titulo})){
+                if (await collection.findOne({ titulo: titulo })) {
                     throw new Error(`${titulo} already in use`)
                 }
 
-                if(await !autorescollection.findOne({email: autor})){
+                if (await !autorescollection.findOne({ email: autor })) {
                     throw new Error(`${autor} doesn't exist`)
                 }
 
-                if(await !ingredientescollection.findOne({nombre: ingredientes})){
+                if (await !ingredientescollection.findOne({ nombre: ingredientes })) {
                     throw new Error(`${ingredientes} doesn't exist`)
                 }
 
@@ -215,7 +269,7 @@ const runGraphQLServer = function (context) {
                 today = `${dd}/${mm}/${yyyy}`;
                 const fecha = today;
 
-                const result = await collection.insertOne({titulo, descripcion, fecha, autor, ingredientes})
+                const result = await collection.insertOne({ titulo, descripcion, fecha, autor, ingredientes })
 
                 return {
                     _id: result.ops[0]._id,
@@ -226,145 +280,111 @@ const runGraphQLServer = function (context) {
                     ingredientes
                 }
 
-                
+
             },
 
-            deleteReceta: (parent, args, ctx, info) => {
-                const receta = args.titulo;
+            deleteReceta: async (parent, args, ctx, info) => {
+                const { id } = args;
+                const { client } = ctx;
 
-                if (recetasData.some(obj => obj.titulo === receta)) {
-                    const result = recetasData.find(obj => obj.titulo === receta);
-                    const index = recetasData.indexOf(result);
+                const db = client.db("recetas");
+                const collection = db.collection("recetas");
+                await collection.deleteOne({ "_id": ObjectID(id) }, true);
 
-                    recetasData.splice(index, 1);
+                return "Removed"
 
-                    return (`Successfully deleted ${receta}`)
-                } else {
-                    return (`Recipe ${receta} not found`)
+
+            },
+
+            deleteAutor: async (parent, args, ctx, info) => {
+                const { email } = args;
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                let collection = db.collection("autores");
+
+                await collection.deleteOne({ "email": email})
+                collection = db.collection("recetas");
+                await collection.deleteMany({"autor": email})
+
+                return "Removed"
+            },
+
+            deleteIngrediente: async (parent, args, ctx, info) => {
+                const { nombre } = args;
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                let collection = db.collection("ingredientes");
+
+                await collection.deleteOne({ "nombre": nombre})
+                collection = db.collection("recetas");
+                await collection.deleteMany({"ingredientes": nombre})
+
+                return "Removed"
+            },
+
+            editAutor: async (parent, args, ctx, info) => {
+                const { id, nuevoNombre, nuevoEmail } = args;
+                const { client } = ctx;
+
+                const db = client.db("recetas");
+                const collection = db.collection("autores");
+
+                if (nuevoNombre) {
+                    await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "nombre": nuevoNombre } });
                 }
 
-
-            },
-
-            deleteAutor: (parent, args, ctx, info) => {
-                const nombre = args.nombre;
-
-                if (autorData.some(obj => obj.nombre === nombre)) {
-                    const result = autorData.find(obj => obj.nombre === nombre);
-                    const index = autorData.indexOf(result);
-
-                    autorData.splice(index, 1);
-
-                    recetasData.forEach(elem => {
-
-                        const ff = elem.autor === nombre
-                        if (ff) {
-                            const index = recetasData.indexOf(ff)
-                            recetasData.splice(index, 1);
-                        }
-                    })
-
-                    return (`Deleted author ${nombre} successfully`)
-                } else {
-                    return (`Author ${nombre} not found`)
+                if (nuevoEmail) {
+                    await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "email": nuevoEmail } });
                 }
 
+                const result = collection.findOne({ _id: ObjectID(id) })
+
+                return result;
 
             },
 
-            deleteIngrediente: (parent, args, ctx, info) => {
-                const nombre = args.nombre;
+            editReceta: async (parent, args, ctx, info) => {
+                const { id, titulo, descripcion, autor, ingredientes } = args;
+                const { client } = ctx;
 
-                const result = ingredientesData.filter(obj => obj.nombre === nombre);
-                if (ingredientesData.some(obj => obj.nombre === nombre)) {
-                    ingredientesData.forEach(elem => {
-                        const ff = elem.nombre === nombre;
-                        if (ff) {
-                            ingredientesData.indexOf(ff)
-                            ingredientesData.splice(ff, 1)
-                        }
-                    })
+                const db = client.db("recetas");
+                const collection = db.collection("recetas");
 
-                    return (`Ingredient ${nombre} deleted successfully`)
-                } else {
-                    return (`Ingredient ${nombre} not found`)
+                if (titulo) {
+                    await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "titulo": titulo } });
                 }
-            },
 
-            editAutor: (parent, args, ctx, info) => {
-                const email = args.email;
-
-                if (email) {
-                    const nombre = args.nombre;
-
-                    if (autorData.some(obj => obj.nombre === nombre)) {
-                        const result = autorData.find(obj => obj.nombre === nombre);
-                        const index = autorData.indexOf(result);
-                        autorData[index].email = email
-
-                        const f = autorData.find(obj => obj.nombre === nombre);
-
-                        return f;
-                    }
-                }
-            },
-
-            editReceta: (parent, args, ctx, info) => {
-                const descripcion = args.descripcion;
-                const autor = args.autor;
-                const ingredientes = args.ingredientes;
-                const titulo = args.titulo;
                 if (descripcion) {
-                    if (recetasData.some(obj => obj.titulo === titulo)) {
-                        const result = recetasData.find(obj => obj.titulo === titulo);
-                        const index = recetasData.indexOf(result);
-                        recetasData[index].descripcion = descripcion;
-                    }
-                }
-                if (autor) {
-                    const aut = autorData.some(obj => obj.nombre === autor);
-                    if (aut) {
-                        if (recetasData.some(obj => obj.titulo === titulo)) {
-                            const result = recetasData.find(obj => obj.titulo === titulo);
-                            const index = recetasData.indexOf(result);
-                            recetasData[index].autor = autor;
-                        }
-                    }
-                    if (!aut || null) {
-                        return (`Autor ${autor} not found`)
-                    }
-                }
-                if (ingredientes) {
-                    const ing = ingredientesData.some(obj => obj.nombre === ingredientes);
-                    if (ing) {
-                        if (recetasData.some(obj => obj.titulo === titulo)) {
-                            const result = recetasData.find(obj => obj.titulo === titulo);
-                            const index = recetasData.indexOf(result);
-                            recetasData[index].ingredientes = ingredientes;
-                        }
-                    }
-                    if (!ing || null) {
-                        return (`Ingredient ${ingredientes} not found.`)
-                    }
+                    await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "descripcion": descripcion } });
                 }
 
-                const f = recetasData.find(obj => obj.titulo === titulo);
-                return f;
+                if (autor) {
+                    await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "autor": autor } });
+                }
+
+                if (ingredientes) {
+                    await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "ingredientes": ingredientes } });
+                }
+
+                const result = collection.findOne({ _id: ObjectID(id) })
+
+                return result;
             },
 
-            editIngrediente: (parent, args, ctx, info) => {
-                const nombre = args.nombre;
-                const nombre_nuevo = args.nombre_nuevo;
+            editIngrediente: async (parent, args, ctx, info) => {
+                const { id, nuevoNombre } = args;
+                const { client } = ctx;
 
-                const gg = ingredientesData.some(obj => obj.nombre === nombre);
-                if (gg) {
-                    const result = ingredientesData.find(obj => obj.nombre === nombre);
-                    const index = ingredientesData.indexOf(result);
-                    ingredientesData[index].nombre = nombre_nuevo;
+                const db = client.db("recetas");
+                const collection = db.collection("ingredientes");
 
-                    const f = ingredientesData.find(obj => obj.nombre === nombre_nuevo);
-                    return f;
-                }
+                await collection.updateOne({ "_id": ObjectID(id) }, { $set: { "nombre": nuevoNombre } })
+
+                const result = collection.findOne({ "_id": ObjectID(id) })
+
+                return result;
             }
 
 
@@ -402,8 +422,3 @@ const runApp = async function () {
 };
 
 runApp();
-
-
-
-
-
